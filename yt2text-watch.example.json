@@ -24,9 +24,11 @@
   },
   "notify": {
     "enabled": true,
+    "mode": "system",
     "onSuccess": true,
     "onFailure": true,
-    "title": "yt2text Watch"
+    "title": "yt2text Watch",
+    "terminalMessage": "Done"
   },
   "transcription": {
     "asr": "system",

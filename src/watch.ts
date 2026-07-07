@@ -37,11 +37,15 @@ interface WatchPaths {
   stateFile?: string;
 }
 
+type WatchNotifyMode = "system" | "terminal" | "both";
+
 interface WatchNotify {
   enabled?: boolean;
+  mode?: WatchNotifyMode;
   onSuccess?: boolean;
   onFailure?: boolean;
   title?: string;
+  terminalMessage?: string;
 }
 
 interface WatchConfig {
@@ -76,6 +80,7 @@ interface ChannelState {
   name?: string;
   url: string;
   lastCheckedAt?: string;
+  lastError?: string;
   videos: Record<string, VideoRecord>;
 }
 
@@ -88,9 +93,11 @@ interface WatchSummary {
   startedAt: string;
   finishedAt?: string;
   channelsChecked: number;
+  channelsFailed: number;
   videosListed: number;
   videosMarkedSeen: number;
   videosSelected: number;
+  videosDeferred: number;
   videosProcessed: number;
   videosFailed: number;
 }
@@ -136,9 +143,11 @@ export function defaultWatchConfig(): WatchConfig {
     },
     notify: {
       enabled: true,
+      mode: process.platform === "darwin" ? "terminal" : "system",
       onSuccess: true,
       onFailure: true,
       title: "yt2text Watch",
+      terminalMessage: "Done",
     },
     transcription: {
       asr: defaultAsrProvider(),
@@ -206,7 +215,10 @@ function configDir(configPath: string): string {
 }
 
 function scheduleTimes(config: WatchConfig): string[] {
-  const raw = config.schedule?.times ?? (config.schedule?.time ? [config.schedule.time] : ["03:00"]);
+  const raw = config.schedule?.times ?? (config.schedule?.time !== undefined ? [config.schedule.time] : ["03:00"]);
+  if (!Array.isArray(raw) || raw.some((time) => typeof time !== "string")) {
+    throw new Yt2TextError("Watch schedule times must be strings in HH:mm format.", "INVALID_CONFIG");
+  }
   const times = raw.map((time) => time.trim()).filter(Boolean);
   if (times.length === 0) throw new Yt2TextError("Watch schedule must include at least one time", "INVALID_CONFIG");
   for (const time of times) {
@@ -240,9 +252,11 @@ function newSummary(): WatchSummary {
   return {
     startedAt: new Date().toISOString(),
     channelsChecked: 0,
+    channelsFailed: 0,
     videosListed: 0,
     videosMarkedSeen: 0,
     videosSelected: 0,
+    videosDeferred: 0,
     videosProcessed: 0,
     videosFailed: 0,
   };
@@ -267,13 +281,27 @@ function watchSummaryText(summary: WatchSummary): string {
 
   if (summary.videosProcessed > 0) parts.push(`processed ${summary.videosProcessed}`);
   if (summary.videosMarkedSeen > 0) parts.push(`marked seen ${summary.videosMarkedSeen}`);
-  if (summary.videosFailed > 0) parts.push(`failed ${summary.videosFailed}`);
-  if (summary.videosProcessed === 0 && summary.videosMarkedSeen === 0 && summary.videosFailed === 0) parts.push("no new videos");
+  if (summary.videosDeferred > 0) parts.push(`deferred ${summary.videosDeferred}`);
+  if (summary.videosFailed > 0) parts.push(`failed videos ${summary.videosFailed}`);
+  if (summary.channelsFailed > 0) parts.push(`failed channels ${summary.channelsFailed}`);
+  if (
+    summary.videosProcessed === 0 &&
+    summary.videosMarkedSeen === 0 &&
+    summary.videosDeferred === 0 &&
+    summary.videosFailed === 0 &&
+    summary.channelsFailed === 0
+  ) {
+    parts.push("no new videos");
+  }
   return `${parts.join(", ")}.`;
 }
 
 function appleScriptString(value: string): string {
   return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+function shellString(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
 function powerShellString(value: string): string {
@@ -319,6 +347,38 @@ async function sendSystemNotification(title: string, message: string): Promise<v
   }
 }
 
+async function openMacTerminal(title: string, status: string, message: string): Promise<void> {
+  const command = [
+    "clear",
+    `printf '%s\\n' ${shellString(status)} ${shellString(`${title}: ${message}`)} ${shellString(new Date().toLocaleString())}`,
+    "echo",
+    "read -r -p 'Press Enter to close...'",
+  ].join("; ");
+
+  await runCommand(
+    "osascript",
+    [
+      "-e",
+      [
+        'tell application "Terminal"',
+        "activate",
+        `do script ${appleScriptString(command)}`,
+        "end tell",
+      ].join("\n"),
+    ],
+    {
+      quiet: true,
+      timeoutMs: 10_000,
+    },
+  );
+}
+
+function notifyMode(config: WatchConfig): WatchNotifyMode {
+  const mode = config.notify?.mode ?? (process.platform === "darwin" ? "terminal" : "system");
+  if (mode === "system" || mode === "terminal" || mode === "both") return mode;
+  throw new Yt2TextError(`Invalid notify.mode "${mode}". Use system, terminal, or both.`, "INVALID_CONFIG");
+}
+
 async function notifyWatchRun(config: WatchConfig, ok: boolean, summary?: WatchSummary, error?: unknown): Promise<void> {
   const notify = config.notify ?? {};
   if (notify.enabled === false) return;
@@ -331,12 +391,34 @@ async function notifyWatchRun(config: WatchConfig, ok: boolean, summary?: WatchS
       ? watchSummaryText(summary)
       : "Watch run completed."
     : `Watch run failed: ${asError(error).message}`;
+  const terminalStatus = ok ? notify.terminalMessage ?? "Done" : "Failed";
 
   try {
-    await sendSystemNotification(title, message);
+    const mode = notifyMode(config);
+    if (mode === "system" || mode === "both") {
+      await sendSystemNotification(title, message);
+    }
+    if (mode === "terminal" || mode === "both") {
+      if (process.platform !== "darwin") {
+        throw new Yt2TextError("notify.mode=terminal is only supported on macOS.", "NOTIFICATION_FAILED");
+      }
+      await openMacTerminal(title, terminalStatus, message);
+    }
   } catch (notifyError) {
     console.error(`Notification failed: ${asError(notifyError).message}`);
   }
+}
+
+function optionalBoolean(name: string, value: boolean | undefined, defaultValue: boolean): boolean {
+  if (value === undefined) return defaultValue;
+  if (typeof value === "boolean") return value;
+  throw new Yt2TextError(`Invalid watch config: ${name} must be a boolean.`, "INVALID_CONFIG");
+}
+
+function optionalInteger(name: string, value: number | undefined, defaultValue: number, min: number): number {
+  if (value === undefined) return defaultValue;
+  if (Number.isInteger(value) && value >= min) return value;
+  throw new Yt2TextError(`Invalid watch config: ${name} must be an integer >= ${min}.`, "INVALID_CONFIG");
 }
 
 function channelKey(channel: WatchChannel): string {
@@ -345,6 +427,20 @@ function channelKey(channel: WatchChannel): string {
 
 function enabledChannels(config: WatchConfig): WatchChannel[] {
   const channels = config.channels ?? [];
+  if (!Array.isArray(channels)) {
+    throw new Yt2TextError("Watch config channels must be an array.", "INVALID_CONFIG");
+  }
+  for (const [index, channel] of channels.entries()) {
+    if (!channel || typeof channel !== "object" || Array.isArray(channel)) {
+      throw new Yt2TextError(`Watch config channels[${index}] must be an object.`, "INVALID_CONFIG");
+    }
+    if (channel.enabled !== undefined && typeof channel.enabled !== "boolean") {
+      throw new Yt2TextError(`Watch config channels[${index}].enabled must be a boolean.`, "INVALID_CONFIG");
+    }
+    if (channel.url !== undefined && typeof channel.url !== "string") {
+      throw new Yt2TextError(`Watch config channels[${index}].url must be a string.`, "INVALID_CONFIG");
+    }
+  }
   const enabled = channels.filter((channel) => channel.enabled !== false);
   if (enabled.length === 0) {
     throw new Yt2TextError("Watch config has no enabled channels. Set enabled=true or remove enabled=false.", "INVALID_CONFIG");
@@ -530,10 +626,12 @@ async function runWatchOnce(
   const state = await loadState(statePath);
   const channels = enabledChannels(config);
   const check = config.check ?? {};
-  const maxScan = check.maxScanVideosPerChannel ?? 30;
-  const maxNew = check.maxNewVideosPerRun ?? 0;
-  const markExisting = check.markExistingAsSeenOnFirstRun ?? true;
+  const maxScan = optionalInteger("check.maxScanVideosPerChannel", check.maxScanVideosPerChannel, 30, 1);
+  const maxNew = optionalInteger("check.maxNewVideosPerRun", check.maxNewVideosPerRun, 0, 0);
+  const markExisting = optionalBoolean("check.markExistingAsSeenOnFirstRun", check.markExistingAsSeenOnFirstRun, true);
+  const newestFirst = optionalBoolean("check.newestFirst", check.newestFirst, false);
   const summary = newSummary();
+  let remainingNewVideos = maxNew > 0 ? maxNew : Number.POSITIVE_INFINITY;
 
   console.error(`Checking ${channels.length} YouTube channel(s)...`);
   for (const channel of channels) {
@@ -546,10 +644,23 @@ async function runWatchOnce(
     channelState.name = channel.name ?? channelState.name;
     channelState.url = channel.url;
     state.channels[key] = channelState;
+    summary.channelsChecked += 1;
 
     console.error(`Listing ${channel.name ?? channel.url}`);
-    const videos = await listChannelVideos(channel, options, maxScan);
-    summary.channelsChecked += 1;
+    let videos: WatchVideo[];
+    try {
+      videos = await listChannelVideos(channel, options, maxScan);
+      channelState.lastError = undefined;
+    } catch (error) {
+      const message = asError(error).message;
+      summary.channelsFailed += 1;
+      channelState.lastCheckedAt = new Date().toISOString();
+      channelState.lastError = message;
+      await saveState(statePath, state);
+      console.error(`Failed to list ${channel.name ?? channel.url}`);
+      console.error(message);
+      continue;
+    }
     summary.videosListed += videos.length;
     const firstRun = Object.keys(channelState.videos).length === 0;
     const now = new Date().toISOString();
@@ -574,11 +685,17 @@ async function runWatchOnce(
       const existing = channelState.videos[video.id];
       return !existing || existing.status === "failed";
     });
-    const ordered = check.newestFirst ? candidates : [...candidates].reverse();
-    const selected = maxNew > 0 ? ordered.slice(0, maxNew) : ordered;
+    const ordered = newestFirst ? candidates : [...candidates].reverse();
+    const selected = Number.isFinite(remainingNewVideos) ? ordered.slice(0, remainingNewVideos) : ordered;
+    const deferred = Math.max(0, ordered.length - selected.length);
     summary.videosSelected += selected.length;
+    summary.videosDeferred += deferred;
+    remainingNewVideos -= selected.length;
 
     console.error(`Found ${selected.length} new video(s) for ${channel.name ?? channel.url}.`);
+    if (deferred > 0) {
+      console.error(`Deferred ${deferred} video(s) because maxNewVideosPerRun was reached.`);
+    }
     for (const video of selected) {
       const previous = channelState.videos[video.id];
       channelState.videos[video.id] = {

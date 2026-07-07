@@ -1,7 +1,7 @@
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { createRuntimePaths } from "./cache.js";
-import { defaultConfig, expandHome, type ConfigFile } from "./config.js";
+import { defaultConfig, expandHome, normalizeConfig, type ConfigFile } from "./config.js";
 import { detectCookieBrowsers } from "./cookies.js";
 import { ensureYtDlp } from "./deps.js";
 import { asError, Yt2TextError } from "./errors.js";
@@ -190,7 +190,7 @@ async function loadWatchConfig(path: string): Promise<WatchConfig> {
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
       throw new Yt2TextError(`Invalid watch config ${target}: root must be a JSON object`, "INVALID_CONFIG");
     }
-    return parsed as WatchConfig;
+    return normalizeWatchConfig(parsed as Record<string, unknown>, target);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       throw new Yt2TextError(
@@ -203,6 +203,132 @@ async function loadWatchConfig(path: string): Promise<WatchConfig> {
     }
     throw error;
   }
+}
+
+function validateKnownKeys(path: string, raw: Record<string, unknown>, known: readonly string[]): void {
+  const allowed = new Set(known);
+  for (const key of Object.keys(raw)) {
+    if (!allowed.has(key)) {
+      throw new Yt2TextError(`Invalid watch config ${path}: unknown field "${key}"`, "INVALID_CONFIG");
+    }
+  }
+}
+
+function objectValue(name: string, value: unknown): Record<string, unknown> | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>;
+  throw new Yt2TextError(`Invalid watch config: ${name} must be an object.`, "INVALID_CONFIG");
+}
+
+function stringValue(name: string, value: unknown): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === "string") return value;
+  throw new Yt2TextError(`Invalid watch config: ${name} must be a string.`, "INVALID_CONFIG");
+}
+
+function stringArrayValue(name: string, value: unknown): string[] | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (Array.isArray(value) && value.every((item) => typeof item === "string")) return value;
+  throw new Yt2TextError(`Invalid watch config: ${name} must be an array of strings.`, "INVALID_CONFIG");
+}
+
+function normalizeWatchConfig(raw: Record<string, unknown>, path: string): WatchConfig {
+  validateKnownKeys(path, raw, ["version", "schedule", "channels", "check", "paths", "notify", "transcription"]);
+
+  const version = optionalInteger("version", raw.version, 1);
+  const scheduleRaw = objectValue("schedule", raw.schedule);
+  const channelsRaw = raw.channels;
+  const checkRaw = objectValue("check", raw.check);
+  const pathsRaw = objectValue("paths", raw.paths);
+  const notifyRaw = objectValue("notify", raw.notify);
+  const transcriptionRaw = objectValue("transcription", raw.transcription);
+
+  let schedule: WatchSchedule | undefined;
+  if (scheduleRaw) {
+    validateKnownKeys(`${path}.schedule`, scheduleRaw, ["time", "times", "runOnStart"]);
+    schedule = {
+      time: stringValue("schedule.time", scheduleRaw.time),
+      times: stringArrayValue("schedule.times", scheduleRaw.times),
+      runOnStart: optionalBoolean("schedule.runOnStart", scheduleRaw.runOnStart),
+    };
+    if (schedule.time !== undefined) parseTime(schedule.time);
+    for (const time of schedule.times ?? []) parseTime(time);
+  }
+
+  let channels: WatchChannel[] | undefined;
+  if (channelsRaw !== undefined && channelsRaw !== null) {
+    if (!Array.isArray(channelsRaw)) {
+      throw new Yt2TextError("Invalid watch config: channels must be an array.", "INVALID_CONFIG");
+    }
+    channels = channelsRaw.map((entry, index) => {
+      const channel = objectValue(`channels[${index}]`, entry);
+      if (!channel) throw new Yt2TextError(`Invalid watch config: channels[${index}] must be an object.`, "INVALID_CONFIG");
+      validateKnownKeys(`${path}.channels[${index}]`, channel, ["id", "name", "url", "enabled"]);
+      return {
+        id: stringValue(`channels[${index}].id`, channel.id),
+        name: stringValue(`channels[${index}].name`, channel.name),
+        url: stringValue(`channels[${index}].url`, channel.url) ?? "",
+        enabled: optionalBoolean(`channels[${index}].enabled`, channel.enabled),
+      };
+    });
+  }
+
+  let check: WatchCheck | undefined;
+  if (checkRaw) {
+    validateKnownKeys(`${path}.check`, checkRaw, ["maxScanVideosPerChannel", "maxNewVideosPerRun", "markExistingAsSeenOnFirstRun", "newestFirst"]);
+    check = {
+      maxScanVideosPerChannel: optionalInteger("check.maxScanVideosPerChannel", checkRaw.maxScanVideosPerChannel, 1),
+      maxNewVideosPerRun: optionalInteger("check.maxNewVideosPerRun", checkRaw.maxNewVideosPerRun, 0),
+      markExistingAsSeenOnFirstRun: optionalBoolean("check.markExistingAsSeenOnFirstRun", checkRaw.markExistingAsSeenOnFirstRun),
+      newestFirst: optionalBoolean("check.newestFirst", checkRaw.newestFirst),
+    };
+  }
+
+  let paths: WatchPaths | undefined;
+  if (pathsRaw) {
+    validateKnownKeys(`${path}.paths`, pathsRaw, ["outputDir", "logDir", "stateFile"]);
+    paths = {
+      outputDir: stringValue("paths.outputDir", pathsRaw.outputDir),
+      logDir: stringValue("paths.logDir", pathsRaw.logDir),
+      stateFile: stringValue("paths.stateFile", pathsRaw.stateFile),
+    };
+  }
+
+  let notify: WatchNotify | undefined;
+  if (notifyRaw) {
+    validateKnownKeys(`${path}.notify`, notifyRaw, ["enabled", "mode", "onSuccess", "onFailure", "title", "terminalMessage"]);
+    const mode = stringValue("notify.mode", notifyRaw.mode);
+    if (mode !== undefined && mode !== "system" && mode !== "terminal" && mode !== "both") {
+      throw new Yt2TextError(`Invalid watch config: notify.mode must be system, terminal, or both.`, "INVALID_CONFIG");
+    }
+    notify = {
+      enabled: optionalBoolean("notify.enabled", notifyRaw.enabled),
+      mode,
+      onSuccess: optionalBoolean("notify.onSuccess", notifyRaw.onSuccess),
+      onFailure: optionalBoolean("notify.onFailure", notifyRaw.onFailure),
+      title: stringValue("notify.title", notifyRaw.title),
+      terminalMessage: stringValue("notify.terminalMessage", notifyRaw.terminalMessage),
+    };
+  }
+
+  let transcription: WatchConfig["transcription"];
+  if (transcriptionRaw) {
+    const normalized = normalizeConfig(transcriptionRaw, `${path}.transcription`, ["multilingual"]);
+    transcription = {
+      ...normalized,
+      multilingual: optionalBoolean("transcription.multilingual", transcriptionRaw.multilingual),
+    };
+  }
+
+  return {
+    version,
+    schedule,
+    channels,
+    check,
+    paths,
+    notify,
+    transcription,
+  };
 }
 
 function resolvePath(baseDir: string, value: string): string {
@@ -409,16 +535,24 @@ async function notifyWatchRun(config: WatchConfig, ok: boolean, summary?: WatchS
   }
 }
 
-function optionalBoolean(name: string, value: boolean | undefined, defaultValue: boolean): boolean {
-  if (value === undefined) return defaultValue;
+function optionalBoolean(name: string, value: unknown): boolean | undefined {
+  if (value === undefined || value === null) return undefined;
   if (typeof value === "boolean") return value;
   throw new Yt2TextError(`Invalid watch config: ${name} must be a boolean.`, "INVALID_CONFIG");
 }
 
-function optionalInteger(name: string, value: number | undefined, defaultValue: number, min: number): number {
-  if (value === undefined) return defaultValue;
-  if (Number.isInteger(value) && value >= min) return value;
+function booleanWithDefault(name: string, value: unknown, defaultValue: boolean): boolean {
+  return optionalBoolean(name, value) ?? defaultValue;
+}
+
+function optionalInteger(name: string, value: unknown, min: number): number | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === "number" && Number.isInteger(value) && value >= min) return value;
   throw new Yt2TextError(`Invalid watch config: ${name} must be an integer >= ${min}.`, "INVALID_CONFIG");
+}
+
+function integerWithDefault(name: string, value: unknown, defaultValue: number, min: number): number {
+  return optionalInteger(name, value, min) ?? defaultValue;
 }
 
 function channelKey(channel: WatchChannel): string {
@@ -626,10 +760,10 @@ async function runWatchOnce(
   const state = await loadState(statePath);
   const channels = enabledChannels(config);
   const check = config.check ?? {};
-  const maxScan = optionalInteger("check.maxScanVideosPerChannel", check.maxScanVideosPerChannel, 30, 1);
-  const maxNew = optionalInteger("check.maxNewVideosPerRun", check.maxNewVideosPerRun, 0, 0);
-  const markExisting = optionalBoolean("check.markExistingAsSeenOnFirstRun", check.markExistingAsSeenOnFirstRun, true);
-  const newestFirst = optionalBoolean("check.newestFirst", check.newestFirst, false);
+  const maxScan = integerWithDefault("check.maxScanVideosPerChannel", check.maxScanVideosPerChannel, 30, 1);
+  const maxNew = integerWithDefault("check.maxNewVideosPerRun", check.maxNewVideosPerRun, 0, 0);
+  const markExisting = booleanWithDefault("check.markExistingAsSeenOnFirstRun", check.markExistingAsSeenOnFirstRun, true);
+  const newestFirst = booleanWithDefault("check.newestFirst", check.newestFirst, false);
   const summary = newSummary();
   let remainingNewVideos = maxNew > 0 ? maxNew : Number.POSITIVE_INFINITY;
 

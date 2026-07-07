@@ -292,12 +292,16 @@ open -a TextEdit "$HOME/Documents/yt2text-watch/yt2text-watch.json"
 Create a LaunchAgent that runs every day at 03:00:
 
 ```bash
-COMMAND="$(command -v yt2text-watch)"
+COMMAND="$(command -v yt2text-watch || true)"
+NODE="$(command -v node || true)"
 CONFIG="$HOME/Documents/yt2text-watch/yt2text-watch.json"
 LOGDIR="$HOME/Documents/yt2text-watch/logs"
 PLIST="$HOME/Library/LaunchAgents/com.lopleec.yt2text-watch.plist"
 
 test -n "$COMMAND" || { echo "yt2text-watch is not installed or linked"; exit 1; }
+test -n "$NODE" || { echo "node is not installed"; exit 1; }
+NODEDIR="$(dirname "$NODE")"
+PATH_VALUE="$NODEDIR:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 mkdir -p "$LOGDIR" "$HOME/Library/LaunchAgents"
 
 cat > "$PLIST" <<PLIST
@@ -314,6 +318,11 @@ cat > "$PLIST" <<PLIST
     <string>$CONFIG</string>
     <string>--run-once</string>
   </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>$PATH_VALUE</string>
+  </dict>
   <key>StartCalendarInterval</key>
   <dict>
     <key>Hour</key>
@@ -358,11 +367,15 @@ launchctl bootout "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.lopleec.yt2text
 Use a user timer for a reboot-safe daily run. Replace paths if your config lives somewhere else.
 
 ```bash
-COMMAND="$(command -v yt2text-watch)"
+COMMAND="$(command -v yt2text-watch || true)"
+NODE="$(command -v node || true)"
 WORKDIR="$HOME/Documents/yt2text-watch"
 CONFIG="$WORKDIR/yt2text-watch.json"
 
 test -n "$COMMAND" || { echo "yt2text-watch is not installed or linked"; exit 1; }
+test -n "$NODE" || { echo "node is not installed"; exit 1; }
+NODEDIR="$(dirname "$NODE")"
+PATH_VALUE="$NODEDIR:$HOME/.npm-global/bin:/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin"
 mkdir -p "$WORKDIR/logs" "$HOME/.config/systemd/user"
 yt2text-watch watch --init "$CONFIG"
 ```
@@ -379,6 +392,7 @@ After=network-online.target
 [Service]
 Type=oneshot
 WorkingDirectory=$WORKDIR
+Environment=PATH=$PATH_VALUE
 ExecStart=$COMMAND watch $CONFIG --run-once
 UNIT
 ```
@@ -423,12 +437,14 @@ Desktop notifications from systemd user timers require a graphical user session.
 Cron is simpler but less reliable for desktop notifications. Use absolute paths.
 
 ```cron
+PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 0 3 * * * cd /Users/YOU/Documents/yt2text-watch && /opt/homebrew/bin/yt2text-watch watch /Users/YOU/Documents/yt2text-watch/yt2text-watch.json --run-once >> /Users/YOU/Documents/yt2text-watch/logs/cron.log 2>&1
 ```
 
 On Linux the line looks like:
 
 ```cron
+PATH=/home/YOU/.npm-global/bin:/usr/local/bin:/usr/bin:/bin
 0 3 * * * cd /home/YOU/Documents/yt2text-watch && /home/YOU/.npm-global/bin/yt2text-watch watch /home/YOU/Documents/yt2text-watch/yt2text-watch.json --run-once >> /home/YOU/Documents/yt2text-watch/logs/cron.log 2>&1
 ```
 

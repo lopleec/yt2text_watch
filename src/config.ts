@@ -113,9 +113,10 @@ function integerValue(path: string, key: string, value: unknown, min: number): n
   throw configError(path, key, `an integer >= ${min}`);
 }
 
-function normalizeConfig(raw: Record<string, unknown>, path: string): ConfigFile {
+export function normalizeConfig(raw: Record<string, unknown>, path: string, extraKnownKeys: readonly string[] = []): ConfigFile {
+  const extraKeys = new Set(extraKnownKeys);
   for (const key of Object.keys(raw)) {
-    if (!knownConfigKeys.has(key as keyof ConfigFile)) {
+    if (!knownConfigKeys.has(key as keyof ConfigFile) && !extraKeys.has(key)) {
       throw new Yt2TextError(`Invalid config ${path}: unknown field "${key}"`, "INVALID_CONFIG");
     }
   }

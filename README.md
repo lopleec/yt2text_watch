@@ -32,7 +32,7 @@ Windows support is included but currently untested. macOS and Linux are the prim
 Recommended for this fork:
 
 ```bash
-npm install -g github:lopleec/yt2text_watch
+npm install -g yt2text-watch
 ```
 
 From this repository:

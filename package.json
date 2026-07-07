@@ -1,5 +1,5 @@
 {
-  "name": "yt2text",
+  "name": "yt2text-watch",
   "version": "0.1.0",
   "description": "Watch YouTube channels and transcribe new videos with yt2text.",
   "type": "module",

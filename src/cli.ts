@@ -187,7 +187,7 @@ async function runInteractive(): Promise<void> {
   const rl = createInterface({ input, output });
   try {
     const config = await loadConfig();
-    console.error("yt2text interactive mode");
+    console.error("yt2text-watch interactive mode");
     const source = expandHome(await askRequired(rl, "YouTube URL or local file path: "));
     const inputKind = isUrl(source) ? "url" : "file";
     const languageChoice = await askChoice(rl, "Recognition language", [
@@ -273,8 +273,8 @@ async function runInteractive(): Promise<void> {
 
 const program = new Command();
 program
-  .name("yt2text")
-  .description("Download audio and save local transcripts.")
+  .name("yt2text-watch")
+  .description("Download audio, save local transcripts, and watch channels on a schedule.")
   .version("0.1.0");
 
 const runCommand = addCommonOptions(
@@ -359,7 +359,7 @@ async function main(): Promise<void> {
     program.help();
   }
 
-  await program.parseAsync(["node", "yt2text", ...withDefaultCommand(argv)]);
+  await program.parseAsync(["node", "yt2text-watch", ...withDefaultCommand(argv)]);
 }
 
 main().catch((error) => {

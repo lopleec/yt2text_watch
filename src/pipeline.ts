@@ -18,7 +18,7 @@ function progress(message: string): void {
 export async function runPipeline(input: string, inputKind: "url" | "file", options: CliOptions): Promise<string> {
   if (!isSupportedPlatform()) {
     throw new Yt2TextError(
-      `yt2text only supports macOS, Linux, and Windows. Current platform: ${platformName()} (${process.platform}).`,
+      `yt2text-watch only supports macOS, Linux, and Windows. Current platform: ${platformName()} (${process.platform}).`,
       "UNSUPPORTED_PLATFORM",
     );
   }

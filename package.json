@@ -25,7 +25,7 @@
     "win32"
   ],
   "bin": {
-    "yt2text": "./dist/cli.js"
+    "yt2text-watch": "./dist/cli.js"
   },
   "files": [
     "dist",

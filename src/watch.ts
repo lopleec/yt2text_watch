@@ -37,12 +37,20 @@ interface WatchPaths {
   stateFile?: string;
 }
 
+interface WatchNotify {
+  enabled?: boolean;
+  onSuccess?: boolean;
+  onFailure?: boolean;
+  title?: string;
+}
+
 interface WatchConfig {
   version?: number;
   schedule?: WatchSchedule;
   channels?: WatchChannel[];
   check?: WatchCheck;
   paths?: WatchPaths;
+  notify?: WatchNotify;
   transcription?: ConfigFile & { multilingual?: boolean };
 }
 
@@ -74,6 +82,17 @@ interface ChannelState {
 interface WatchState {
   version: 1;
   channels: Record<string, ChannelState>;
+}
+
+interface WatchSummary {
+  startedAt: string;
+  finishedAt?: string;
+  channelsChecked: number;
+  videosListed: number;
+  videosMarkedSeen: number;
+  videosSelected: number;
+  videosProcessed: number;
+  videosFailed: number;
 }
 
 export interface WatchRunOptions {
@@ -114,6 +133,12 @@ export function defaultWatchConfig(): WatchConfig {
       outputDir: "./transcripts",
       logDir: "./logs",
       stateFile: "./yt2text-watch-state.json",
+    },
+    notify: {
+      enabled: true,
+      onSuccess: true,
+      onFailure: true,
+      title: "yt2text Watch",
     },
     transcription: {
       asr: defaultAsrProvider(),
@@ -160,7 +185,7 @@ async function loadWatchConfig(path: string): Promise<WatchConfig> {
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       throw new Yt2TextError(
-        `Watch config not found: ${target}\n\nCreate one with: yt2text watch --init ${target}`,
+        `Watch config not found: ${target}\n\nCreate one with: yt2text-watch watch --init ${target}`,
         "WATCH_CONFIG_NOT_FOUND",
       );
     }
@@ -209,6 +234,109 @@ function nextRunAt(times: string[], now = new Date()): Date {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
+}
+
+function newSummary(): WatchSummary {
+  return {
+    startedAt: new Date().toISOString(),
+    channelsChecked: 0,
+    videosListed: 0,
+    videosMarkedSeen: 0,
+    videosSelected: 0,
+    videosProcessed: 0,
+    videosFailed: 0,
+  };
+}
+
+function finishSummary(summary: WatchSummary): WatchSummary {
+  return {
+    ...summary,
+    finishedAt: new Date().toISOString(),
+  };
+}
+
+function plural(count: number, singular: string, pluralForm = `${singular}s`): string {
+  return `${count} ${count === 1 ? singular : pluralForm}`;
+}
+
+function watchSummaryText(summary: WatchSummary): string {
+  const parts = [
+    `Checked ${plural(summary.channelsChecked, "channel")}`,
+    `listed ${plural(summary.videosListed, "video")}`,
+  ];
+
+  if (summary.videosProcessed > 0) parts.push(`processed ${summary.videosProcessed}`);
+  if (summary.videosMarkedSeen > 0) parts.push(`marked seen ${summary.videosMarkedSeen}`);
+  if (summary.videosFailed > 0) parts.push(`failed ${summary.videosFailed}`);
+  if (summary.videosProcessed === 0 && summary.videosMarkedSeen === 0 && summary.videosFailed === 0) parts.push("no new videos");
+  return `${parts.join(", ")}.`;
+}
+
+function appleScriptString(value: string): string {
+  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+function powerShellString(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+async function sendSystemNotification(title: string, message: string): Promise<void> {
+  const body = message.length > 240 ? `${message.slice(0, 237)}...` : message;
+
+  if (process.platform === "darwin") {
+    await runCommand("osascript", ["-e", `display notification ${appleScriptString(body)} with title ${appleScriptString(title)}`], {
+      quiet: true,
+      timeoutMs: 10_000,
+    });
+    return;
+  }
+
+  if (process.platform === "linux") {
+    await runCommand("notify-send", [title, body], {
+      quiet: true,
+      timeoutMs: 10_000,
+    });
+    return;
+  }
+
+  if (process.platform === "win32") {
+    const script = [
+      "Add-Type -AssemblyName System.Windows.Forms",
+      "Add-Type -AssemblyName System.Drawing",
+      "$notify = New-Object System.Windows.Forms.NotifyIcon",
+      "$notify.Icon = [System.Drawing.SystemIcons]::Information",
+      `$notify.BalloonTipTitle = ${powerShellString(title)}`,
+      `$notify.BalloonTipText = ${powerShellString(body)}`,
+      "$notify.Visible = $true",
+      "$notify.ShowBalloonTip(5000)",
+      "Start-Sleep -Seconds 6",
+      "$notify.Dispose()",
+    ].join("; ");
+    await runCommand("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script], {
+      quiet: true,
+      timeoutMs: 15_000,
+    });
+  }
+}
+
+async function notifyWatchRun(config: WatchConfig, ok: boolean, summary?: WatchSummary, error?: unknown): Promise<void> {
+  const notify = config.notify ?? {};
+  if (notify.enabled === false) return;
+  if (ok && notify.onSuccess === false) return;
+  if (!ok && notify.onFailure === false) return;
+
+  const title = notify.title ?? "yt2text Watch";
+  const message = ok
+    ? summary
+      ? watchSummaryText(summary)
+      : "Watch run completed."
+    : `Watch run failed: ${asError(error).message}`;
+
+  try {
+    await sendSystemNotification(title, message);
+  } catch (notifyError) {
+    console.error(`Notification failed: ${asError(notifyError).message}`);
+  }
 }
 
 function channelKey(channel: WatchChannel): string {
@@ -392,13 +520,20 @@ async function listChannelVideos(channel: WatchChannel, options: CliOptions, lim
   }
 }
 
-async function runWatchOnce(configPath: string, config: WatchConfig, statePath: string, options: CliOptions, markSeenOnly: boolean): Promise<void> {
+async function runWatchOnce(
+  configPath: string,
+  config: WatchConfig,
+  statePath: string,
+  options: CliOptions,
+  markSeenOnly: boolean,
+): Promise<WatchSummary> {
   const state = await loadState(statePath);
   const channels = enabledChannels(config);
   const check = config.check ?? {};
   const maxScan = check.maxScanVideosPerChannel ?? 30;
   const maxNew = check.maxNewVideosPerRun ?? 0;
   const markExisting = check.markExistingAsSeenOnFirstRun ?? true;
+  const summary = newSummary();
 
   console.error(`Checking ${channels.length} YouTube channel(s)...`);
   for (const channel of channels) {
@@ -414,6 +549,8 @@ async function runWatchOnce(configPath: string, config: WatchConfig, statePath: 
 
     console.error(`Listing ${channel.name ?? channel.url}`);
     const videos = await listChannelVideos(channel, options, maxScan);
+    summary.channelsChecked += 1;
+    summary.videosListed += videos.length;
     const firstRun = Object.keys(channelState.videos).length === 0;
     const now = new Date().toISOString();
 
@@ -428,6 +565,7 @@ async function runWatchOnce(configPath: string, config: WatchConfig, statePath: 
       }
       channelState.lastCheckedAt = now;
       await saveState(statePath, state);
+      summary.videosMarkedSeen += videos.length;
       console.error(`Marked ${videos.length} existing video(s) as seen for ${channel.name ?? channel.url}.`);
       continue;
     }
@@ -438,6 +576,7 @@ async function runWatchOnce(configPath: string, config: WatchConfig, statePath: 
     });
     const ordered = check.newestFirst ? candidates : [...candidates].reverse();
     const selected = maxNew > 0 ? ordered.slice(0, maxNew) : ordered;
+    summary.videosSelected += selected.length;
 
     console.error(`Found ${selected.length} new video(s) for ${channel.name ?? channel.url}.`);
     for (const video of selected) {
@@ -461,12 +600,14 @@ async function runWatchOnce(configPath: string, config: WatchConfig, statePath: 
           outputPath,
           lastError: undefined,
         };
+        summary.videosProcessed += 1;
       } catch (error) {
         channelState.videos[video.id] = {
           ...channelState.videos[video.id],
           status: "failed",
           lastError: asError(error).message,
         };
+        summary.videosFailed += 1;
         console.error(`Failed: ${video.title}`);
         console.error(asError(error).message);
       } finally {
@@ -478,13 +619,17 @@ async function runWatchOnce(configPath: string, config: WatchConfig, statePath: 
     channelState.lastCheckedAt = new Date().toISOString();
     await saveState(statePath, state);
   }
+
+  return finishSummary(summary);
 }
 
 async function runScheduledCheck(configPath: string, config: WatchConfig, statePath: string, options: CliOptions): Promise<void> {
   try {
-    await runWatchOnce(configPath, config, statePath, options, false);
+    const summary = await runWatchOnce(configPath, config, statePath, options, false);
+    await notifyWatchRun(config, true, summary);
   } catch (error) {
     console.error(`Watch run failed: ${asError(error).message}`);
+    await notifyWatchRun(config, false, undefined, error);
   }
 }
 
@@ -511,7 +656,13 @@ export async function runWatch(configPath: string, runOptions: WatchRunOptions =
   console.error(`Watch logs: ${logFile}`);
 
   if (runOptions.runOnce) {
-    await runWatchOnce(absoluteConfig, config, statePath, options, Boolean(runOptions.markSeen));
+    try {
+      const summary = await runWatchOnce(absoluteConfig, config, statePath, options, Boolean(runOptions.markSeen));
+      await notifyWatchRun(config, true, summary);
+    } catch (error) {
+      await notifyWatchRun(config, false, undefined, error);
+      throw error;
+    }
     return;
   }
 

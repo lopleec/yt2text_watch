@@ -88,7 +88,7 @@ export async function ensureMacosSwiftc(options: Pick<CliOptions, "offline">): P
   if (await commandExists("swiftc")) return;
 
   throw new Yt2TextError(
-    "Xcode Command Line Tools installer was opened. Finish the macOS installation, then rerun yt2text.",
+    "Xcode Command Line Tools installer was opened. Finish the macOS installation, then rerun yt2text-watch.",
     "MISSING_DEPENDENCY",
   );
 }

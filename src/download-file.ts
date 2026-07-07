@@ -11,7 +11,7 @@ export async function downloadFile(url: string, destination: string, label?: str
   const tmp = `${destination}.tmp`;
 
   const response = await fetch(url, {
-    headers: { "user-agent": "yt2text/0.1" },
+    headers: { "user-agent": "yt2text-watch/0.1" },
     redirect: "follow",
   });
 

@@ -22,6 +22,12 @@
     "logDir": "./logs",
     "stateFile": "./yt2text-watch-state.json"
   },
+  "notify": {
+    "enabled": true,
+    "onSuccess": true,
+    "onFailure": true,
+    "title": "yt2text Watch"
+  },
   "transcription": {
     "asr": "system",
     "systemMode": "offline",

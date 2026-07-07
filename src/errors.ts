@@ -30,7 +30,7 @@ export function explainError(error: unknown): string {
     hints.push("YouTube 要求登录/验证：请使用 --cookies-from-browser chrome/safari/firefox，或在交互模式里选择浏览器 cookies。");
   }
   if (lower.includes("http error 403") || lower.includes("forbidden")) {
-    hints.push("下载被拒绝：先试浏览器 cookies；如果仍失败，运行 yt2text doctor 检查 yt-dlp，并可用 --update-ytdlp 更新下载器。");
+    hints.push("下载被拒绝：先试浏览器 cookies；如果仍失败，运行 yt2text-watch doctor 检查 yt-dlp，并可用 --update-ytdlp 更新下载器。");
   }
   if (lower.includes("yt-dlp") && lower.includes("not cached") && lower.includes("offline")) {
     hints.push("当前是离线模式但 yt-dlp 尚未缓存：去掉 --offline 让工具自动下载依赖。");
@@ -39,10 +39,10 @@ export function explainError(error: unknown): string {
     hints.push("ffmpeg 不可用：重新 npm install，或安装系统 ffmpeg 后重试。");
   }
   if (lower.includes("swiftc was not found")) {
-    hints.push("macOS 系统语音 helper 需要 Swift 编译器：yt2text 会自动尝试打开 Xcode Command Line Tools 安装器；安装完成后重试。");
+    hints.push("macOS 系统语音 helper 需要 Swift 编译器：yt2text-watch 会自动尝试打开 Xcode Command Line Tools 安装器；安装完成后重试。");
   }
   if (lower.includes("xcode command line tools installer was opened")) {
-    hints.push("请在 macOS 弹出的安装窗口里完成 Xcode Command Line Tools 安装，完成后重新运行刚才的 yt2text 命令。");
+    hints.push("请在 macOS 弹出的安装窗口里完成 Xcode Command Line Tools 安装，完成后重新运行刚才的 yt2text-watch 命令。");
   }
   if (lower.includes("xcode-select --install")) {
     hints.push("如果自动打开失败，可手动运行 xcode-select --install。");
@@ -57,7 +57,7 @@ export function explainError(error: unknown): string {
     hints.push("本地文件路径不可读：确认当前目录，或使用绝对路径。");
   }
   if (lower.includes("invalid config")) {
-    hints.push("配置文件字段名、类型或枚举值不正确：运行 yt2text config --print 查看可用字段。");
+    hints.push("配置文件字段名、类型或枚举值不正确：运行 yt2text-watch config --print 查看可用字段。");
   }
   if (lower.includes("enotfound") || lower.includes("econnreset") || lower.includes("etimedout")) {
     hints.push("网络连接失败：检查代理/网络，或设置 --proxy；依赖和模型只在首次使用时下载。");

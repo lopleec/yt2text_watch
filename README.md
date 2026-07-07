@@ -1,6 +1,6 @@
 # yt2text Watch
 
-This is a scheduled watcher fork of [lopleec/yt2text](https://github.com/lopleec/yt2text). It keeps the original URL/file transcription CLI and adds `yt2text watch` for checking YouTube channels on a schedule.
+This is a scheduled watcher fork of [lopleec/yt2text](https://github.com/lopleec/yt2text). It keeps the original URL/file transcription CLI and adds `yt2text-watch watch` for checking YouTube channels on a schedule.
 
 Download audio from YouTube or another `yt-dlp` supported URL, transcribe it locally or through the platform speech interface, and save the result as `txt`, `json`, or `srt`.
 
@@ -23,7 +23,7 @@ Windows support is included but currently untested. macOS and Linux are the prim
 
 - Node.js 20 or newer.
 - Network access on first use to download `yt-dlp` and, when local ASR is enabled, ASR models.
-- macOS system ASR requires Speech Recognition permission and Xcode Command Line Tools for `swiftc`; yt2text automatically opens Apple's `xcode-select --install` installer when `swiftc` is missing.
+- macOS system ASR requires Speech Recognition permission and Xcode Command Line Tools for `swiftc`; the CLI automatically opens Apple's `xcode-select --install` installer when `swiftc` is missing.
 - Linux local ASR requires the optional `sherpa-onnx-node` package to install correctly.
 - `ffmpeg` is bundled through `@ffmpeg-installer/ffmpeg`; a system `ffmpeg` is used as fallback.
 
@@ -56,40 +56,40 @@ npm run dev -- "https://www.youtube.com/watch?v=ROrOGwJDneo" -l en-US
 macOS default: browser cookies are auto-detected, the system Speech interface runs in offline/on-device mode, and the transcript is saved as `txt` in `~/Downloads`.
 
 ```bash
-yt2text "https://www.youtube.com/watch?v=ROrOGwJDneo" -l en-US
+yt2text-watch "https://www.youtube.com/watch?v=ROrOGwJDneo" -l en-US
 ```
 
 Chinese video using the macOS default language:
 
 ```bash
-yt2text "https://www.youtube.com/watch?v=muAgkhaoLDA"
+yt2text-watch "https://www.youtube.com/watch?v=muAgkhaoLDA"
 ```
 
 Mixed-language or unknown-language video:
 
 ```bash
-yt2text "https://youtu.be/..." --multilingual
+yt2text-watch "https://youtu.be/..." --multilingual
 ```
 
 Local file:
 
 ```bash
-yt2text file ./audio.wav -l en-US
+yt2text-watch file ./audio.wav -l en-US
 ```
 
 Interactive terminal mode:
 
 ```bash
-yt2text
+yt2text-watch
 ```
 
 Check dependencies and effective configuration:
 
 ```bash
-yt2text doctor --fix --show-config
+yt2text-watch doctor --fix --show-config
 ```
 
-`--fix` downloads missing small runtime tools such as `yt-dlp`. On macOS it also opens the Xcode Command Line Tools installer if `swiftc` is missing. That Apple installer still requires the user to finish the system dialog, then rerun yt2text.
+`--fix` downloads missing small runtime tools such as `yt-dlp`. On macOS it also opens the Xcode Command Line Tools installer if `swiftc` is missing. That Apple installer still requires the user to finish the system dialog, then rerun the CLI.
 
 ## Platform Defaults
 
@@ -104,22 +104,22 @@ Use `--asr local` to force local ASR, or `--fallback local` to try local ASR if 
 ## Common Commands
 
 ```bash
-yt2text "https://youtu.be/..."                         # direct run
-yt2text "https://youtu.be/..." -l en-US                # English locale
-yt2text "https://youtu.be/..." --asr local             # force local Whisper ASR
-yt2text "https://youtu.be/..." --multilingual          # local ASR with language auto-detect
-yt2text "https://youtu.be/..." --diarize               # anonymous speaker labels
-yt2text "https://youtu.be/..." -f srt                  # subtitle output
-yt2text "https://youtu.be/..." --audio-quality small   # smaller download
-yt2text "https://youtu.be/..." --parallel-downloads 8  # faster fragmented downloads
-yt2text "https://youtu.be/..." --keep-original-audio --keep-audio
-yt2text file ./meeting.m4a -l zh-CN
-yt2text config
-yt2text config --print
-yt2text doctor
-yt2text watch --init ./yt2text-watch.json
-yt2text watch ./yt2text-watch.json --run-once
-yt2text watch ./yt2text-watch.json
+yt2text-watch "https://youtu.be/..."                         # direct run
+yt2text-watch "https://youtu.be/..." -l en-US                # English locale
+yt2text-watch "https://youtu.be/..." --asr local             # force local Whisper ASR
+yt2text-watch "https://youtu.be/..." --multilingual          # local ASR with language auto-detect
+yt2text-watch "https://youtu.be/..." --diarize               # anonymous speaker labels
+yt2text-watch "https://youtu.be/..." -f srt                  # subtitle output
+yt2text-watch "https://youtu.be/..." --audio-quality small   # smaller download
+yt2text-watch "https://youtu.be/..." --parallel-downloads 8  # faster fragmented downloads
+yt2text-watch "https://youtu.be/..." --keep-original-audio --keep-audio
+yt2text-watch file ./meeting.m4a -l zh-CN
+yt2text-watch config
+yt2text-watch config --print
+yt2text-watch doctor
+yt2text-watch watch --init ./yt2text-watch.json
+yt2text-watch watch ./yt2text-watch.json --run-once
+yt2text-watch watch ./yt2text-watch.json
 ```
 
 ## Important Options
@@ -181,12 +181,12 @@ Runtime:
 
 ## Daily Channel Watcher
 
-`yt2text watch` checks one or more YouTube channel pages, records which videos have already been seen, and transcribes new videos when they appear.
+`yt2text-watch watch` checks one or more YouTube channel pages, records which videos have already been seen, and transcribes new videos when they appear.
 
 Create a watch config in the current folder:
 
 ```bash
-yt2text watch --init ./yt2text-watch.json
+yt2text-watch watch --init ./yt2text-watch.json
 ```
 
 Edit `yt2text-watch.json` and replace the example channel:
@@ -215,6 +215,12 @@ Edit `yt2text-watch.json` and replace the example channel:
     "logDir": "./logs",
     "stateFile": "./yt2text-watch-state.json"
   },
+  "notify": {
+    "enabled": true,
+    "onSuccess": true,
+    "onFailure": true,
+    "title": "yt2text Watch"
+  },
   "transcription": {
     "language": "zh-CN",
     "format": "txt",
@@ -228,9 +234,9 @@ Edit `yt2text-watch.json` and replace the example channel:
 Useful commands:
 
 ```bash
-yt2text watch ./yt2text-watch.json --run-once
-yt2text watch ./yt2text-watch.json --mark-seen --run-once
-yt2text watch ./yt2text-watch.json
+yt2text-watch watch ./yt2text-watch.json --run-once
+yt2text-watch watch ./yt2text-watch.json --mark-seen --run-once
+yt2text-watch watch ./yt2text-watch.json
 ```
 
 Behavior:
@@ -242,25 +248,31 @@ Behavior:
 - Set `markExistingAsSeenOnFirstRun` to `false` if you want the first run to transcribe existing listed videos.
 - `maxScanVideosPerChannel` controls how many latest videos are scanned per channel.
 - `maxNewVideosPerRun: 0` means no limit.
+- `notify.enabled` sends a desktop notification after each completed or failed watch run.
 - Relative `outputDir`, `logDir`, and `stateFile` paths are resolved relative to the watch JSON file.
 - Logs default to `./logs/yt2text-watch.log` next to the JSON file.
 - State defaults to `./yt2text-watch-state.json` next to the JSON file.
+
+Scheduling modes:
+
+- Built-in daemon: `yt2text-watch watch ./yt2text-watch.json` keeps running, sleeps until the next local `HH:mm`, runs, and repeats daily. Keep the terminal open, or run it under `nohup`, `launchd`, `systemd`, or another supervisor.
+- OS scheduler: run `yt2text-watch watch ./yt2text-watch.json --run-once` from `cron`, `launchd`, or `systemd`. In this mode the terminal does not need to stay open, and the OS scheduler controls the time.
 
 Simple background run on macOS/Linux:
 
 ```bash
 mkdir -p ./logs
-nohup yt2text watch ./yt2text-watch.json >> ./logs/watch.out 2>&1 &
+nohup yt2text-watch watch ./yt2text-watch.json >> ./logs/watch.out 2>&1 &
 ```
 
-For a machine that reboots often, run `yt2text watch ./yt2text-watch.json --run-once` from `cron`, `launchd`, or `systemd` instead.
+For a machine that reboots often, prefer the OS scheduler mode.
 
 ## Configuration
 
 Create a config file:
 
 ```bash
-yt2text config
+yt2text-watch config
 ```
 
 Default paths:
@@ -271,7 +283,7 @@ Default paths:
 Print the platform-specific default config without writing:
 
 ```bash
-yt2text config --print
+yt2text-watch config --print
 ```
 
 Example:
@@ -318,19 +330,19 @@ CLI flags override config values. Environment variables:
 For many YouTube videos, cookies are not needed. When YouTube asks for sign-in or bot verification, use browser cookies:
 
 ```bash
-yt2text "https://youtu.be/..." --cookies-from-browser chrome
+yt2text-watch "https://youtu.be/..." --cookies-from-browser chrome
 ```
 
 macOS defaults to `--cookies-from-browser auto`. You can disable this:
 
 ```bash
-yt2text "https://youtu.be/..." --no-browser-cookies
+yt2text-watch "https://youtu.be/..." --no-browser-cookies
 ```
 
 Manual Netscape cookies file:
 
 ```bash
-yt2text "https://youtu.be/..." --cookies ./cookies.txt
+yt2text-watch "https://youtu.be/..." --cookies ./cookies.txt
 ```
 
 ## Local ASR Models
@@ -338,9 +350,9 @@ yt2text "https://youtu.be/..." --cookies ./cookies.txt
 Local ASR uses `sherpa-onnx-node` and Whisper-style models from the sherpa-onnx project. First use downloads model files into the cache directory. Larger models usually improve accuracy but cost more disk, memory, and CPU time.
 
 ```bash
-yt2text "https://youtu.be/..." --asr local --model tiny
-yt2text "https://youtu.be/..." --asr local --model small
-yt2text "https://youtu.be/..." --multilingual --model medium
+yt2text-watch "https://youtu.be/..." --asr local --model tiny
+yt2text-watch "https://youtu.be/..." --asr local --model small
+yt2text-watch "https://youtu.be/..." --multilingual --model medium
 ```
 
 Use `--offline` only after dependencies and models are already cached.
@@ -350,7 +362,7 @@ Use `--offline` only after dependencies and models are already cached.
 `--diarize` adds anonymous labels such as `Speaker 1` and `Speaker 2`. It does not identify real people by name. Diarization downloads extra local models on first use.
 
 ```bash
-yt2text "https://youtu.be/..." --asr local --diarize
+yt2text-watch "https://youtu.be/..." --asr local --diarize
 ```
 
 ## Troubleshooting
@@ -358,7 +370,7 @@ yt2text "https://youtu.be/..." --asr local --diarize
 Run:
 
 ```bash
-yt2text doctor --fix --show-config
+yt2text-watch doctor --fix --show-config
 ```
 
 Common fixes:
@@ -368,7 +380,7 @@ Common fixes:
 - Browser cookie database is locked: fully quit the browser and retry.
 - 403 or bot verification: use cookies, then try `--update-ytdlp`; if needed, configure `--proxy`.
 - macOS Speech permission denied: allow Speech Recognition for the helper when macOS prompts.
-- `swiftc` is missing: yt2text automatically opens the Xcode Command Line Tools installer on macOS. Finish the system installer and rerun the command; if it did not open, run `xcode-select --install`.
+- `swiftc` is missing: the CLI automatically opens the Xcode Command Line Tools installer on macOS. Finish the system installer and rerun the command; if it did not open, run `xcode-select --install`.
 - Local ASR dependency missing: reinstall without `--no-optional`.
 - Local model extraction fails: make sure `tar` with bzip2 support is available.
 - Long files time out: increase `--download-timeout`, `--convert-timeout`, or `--asr-chunk-timeout`.

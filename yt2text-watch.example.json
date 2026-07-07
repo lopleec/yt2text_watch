@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "schedule": {
+    "times": ["03:00"],
+    "runOnStart": false
+  },
+  "channels": [
+    {
+      "name": "Example channel",
+      "url": "https://www.youtube.com/@example/videos",
+      "enabled": false
+    }
+  ],
+  "check": {
+    "maxScanVideosPerChannel": 30,
+    "maxNewVideosPerRun": 0,
+    "markExistingAsSeenOnFirstRun": true,
+    "newestFirst": false
+  },
+  "paths": {
+    "outputDir": "./transcripts",
+    "logDir": "./logs",
+    "stateFile": "./yt2text-watch-state.json"
+  },
+  "transcription": {
+    "asr": "system",
+    "systemMode": "offline",
+    "fallback": "fail",
+    "language": "zh-CN",
+    "format": "txt",
+    "model": "small",
+    "diarize": false,
+    "filenameTemplate": "{date}-{title}",
+    "audioQuality": "balanced",
+    "keepAudio": false,
+    "keepOriginalAudio": false,
+    "browserCookies": true,
+    "cookiesFromBrowser": "auto",
+    "parallelDownloads": 4,
+    "concurrentFragments": 4,
+    "retries": 10,
+    "fragmentRetries": 10,
+    "socketTimeout": 20,
+    "downloadTimeoutSeconds": 1800,
+    "convertTimeoutSeconds": 600,
+    "asrChunkTimeoutSeconds": 180,
+    "chunkSeconds": 55
+  }
+}

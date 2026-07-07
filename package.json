@@ -1,0 +1,63 @@
+{
+  "name": "yt2text",
+  "version": "0.1.0",
+  "description": "Watch YouTube channels and transcribe new videos with yt2text.",
+  "type": "module",
+  "homepage": "https://github.com/lopleec/yt2text_watch#readme",
+  "bugs": {
+    "url": "https://github.com/lopleec/yt2text_watch/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lopleec/yt2text_watch.git"
+  },
+  "keywords": [
+    "youtube",
+    "transcript",
+    "speech-to-text",
+    "asr",
+    "yt-dlp",
+    "cli"
+  ],
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "bin": {
+    "yt2text": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "helpers",
+    "README.md",
+    "yt2text-watch.example.json"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/cli.ts",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run check",
+    "prepack": "npm run build",
+    "prepare": "npm run build"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "commander": "^12.1.0"
+  },
+  "optionalDependencies": {
+    "sherpa-onnx-node": "^1.13.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "license": "MIT"
+}

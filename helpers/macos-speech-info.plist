@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleIdentifier</key>
+  <string>dev.yt2text.macos-transcribe</string>
+  <key>CFBundleName</key>
+  <string>yt2text macOS Speech Helper</string>
+  <key>CFBundleExecutable</key>
+  <string>macos-transcribe</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>LSUIElement</key>
+  <true/>
+  <key>NSSpeechRecognitionUsageDescription</key>
+  <string>yt2text uses macOS Speech Recognition to transcribe audio files locally when requested.</string>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>yt2text does not record microphone audio, but macOS Speech may require this usage string.</string>
+</dict>
+</plist>
